@@ -11,6 +11,7 @@
 
 ### Backend (Telegram Bot)
 - **main.py** — bot.py для Telegram с интеграцией WebApp
+- **requirements.txt** - список поключаемых библиотек
 
 ### Документация
 - **SECURITY_DNSSEC.md** — инструкции по DNSSEC и DNS-безопасности
