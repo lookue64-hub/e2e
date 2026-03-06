@@ -65,13 +65,20 @@ async def set_main_button():
 
 def main_menu():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔗 Подключиться анонимно", callback_data="find")],
+        [InlineKeyboardButton(text="🔗 Подключиться", callback_data="find")],
+        [InlineKeyboardButton(text="🔐 Открыть шифратор", callback_data="miniapp")],
+        [InlineKeyboardButton(text="ℹ️ О приложении", callback_data="info")]
+    ])
+
+def connected_menu():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔓 Шифратор", callback_data="miniapp")],
         [InlineKeyboardButton(text="🔌 Отключиться", callback_data="stop")]
     ])
 
 def cancel_search():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⏸ Отменить", callback_data="cancel")]
+        [InlineKeyboardButton(text="⏸ Отменить поиск", callback_data="cancel")]
     ])
 
 def partner(uid: int):
@@ -154,21 +161,24 @@ async def cmd_stop(msg: Message):
 @router.message(CommandStart())
 async def start(msg: Message):
     users.add(msg.from_user.id)
-
-    # Инициализируем главную кнопку Telegram
-    try:
-        from aiogram.types import WebAppInfo
-        tg = msg.bot
-        # Создаём кнопку через context если доступно
-    except:
-        pass
+    first_name = msg.from_user.first_name or "Друже"
 
     await msg.answer(
-        "🔐 *Анонимный E2E чат*\n\n"
-        "• Никаких логов\n"
-        "• Полное шифрование\n"
-        "• Временные соединения\n\n"
-        "_Все данные хранятся локально_",
+        f"👋 *Привет, друг!*\n\n"
+        "🔐 *eCrypto — анонимный E2E чат*\n\n"
+        "✨ *Возможности:*\n"
+        "🔒 Полное сквозное шифрование\n"
+        "👁 Никаких логов и истории\n"
+        "⏰ Временные соединения\n"
+        "🛡 Защита от слежения\n"
+        "💬 Можете общаться через шифратор даже в личных чатах\n\n"
+        "🛠️ *Как это работает:*\n"
+        "1️⃣ Открой Mini App через кнопку внизу\n"
+        "2️⃣ Введи секретный ключ согласованный с собеседником\n"
+        "3️⃣ Напиши сообщение и зашифруй его\n"
+        "4️⃣ Отправь результат собеседнику\n\n"
+        "_Все данные хранятся исключительно на вашем устройстве_\n"
+        "`AES-256 + PBKDF2 шифрование`",
         reply_markup=main_menu()
     )
 
@@ -181,7 +191,8 @@ async def find_partner(cb: CallbackQuery):
 
     msg = await cb.message.answer(
         "⏳ *Подключение...*\n\n"
-        "Ожидание собеседника",
+        "Ожидание собеседника\n"
+        "💭 Это может занять несколько секунд",
         reply_markup=cancel_search()
     )
 
@@ -196,8 +207,16 @@ async def find_match(uid):
     p = match(uid)
     if p:
         link(uid, p)
-        text = "✅ *Подключен*\n\n🔐 Используйте шифратор для важных сообщений"
-        kb = main_menu()
+        text = (
+            "✅ *Подключен!*\n\n"
+            "🎉 Вы успешно подключились к собеседнику\n\n"
+            "🔐 *Что дальше:*\n"
+            "• Используйте шифратор для отправки сообщений\n"
+            "• Все сообщения шифруются локально\n"
+            "• Нажмите кнопку 'Шифратор' внизу\n\n"
+            "_Соединение анонимное и полностью защищено_"
+        )
+        kb = connected_menu()
         for u in (uid, p):
             try:
                 await bot.send_message(u, text, reply_markup=kb)
@@ -209,7 +228,7 @@ async def cancel(cb: CallbackQuery):
     uid = cb.from_user.id
     rem_queue(uid)
 
-    # Удаляем сообщение поиска вместо редактирования
+    # Удаляем сообщение поиска сразу
     try:
         await bot.delete_message(cb.message.chat.id, cb.message.message_id)
         # Удаляем из таймеров если есть
@@ -217,18 +236,6 @@ async def cancel(cb: CallbackQuery):
     except:
         pass
 
-    # Отправляем новое сообщение с меню
-    cancel_msg = await cb.message.answer("❌ *Отменено*", reply_markup=main_menu())
-
-    # Автоудаление через 0.1 секунды
-    async def delete_after_delay():
-        await asyncio.sleep(0.1)
-        try:
-            await bot.delete_message(cancel_msg.chat.id, cancel_msg.message_id)
-        except:
-            pass
-
-    asyncio.create_task(delete_after_delay())
     await cb.answer()
 
 @router.callback_query(F.data == "stop")
@@ -249,11 +256,65 @@ async def stop(cb: CallbackQuery):
         pass
 
     # Отправляем новое сообщение с меню
-    await cb.message.answer("🔌 *Отключены*", reply_markup=main_menu())
+    disconnect_msg = (
+        "🔌 *Вы отключились*\n\n"
+        "✨ Вы можете подключиться к другому собеседнику"
+    )
+    await cb.message.answer(disconnect_msg, reply_markup=main_menu())
     try:
-        await bot.send_message(p, "💔 *Собеседник отключился*", reply_markup=main_menu())
+        await bot.send_message(p, "💔 *Собеседник отключился*\n\nВы можете подключиться заново", reply_markup=main_menu())
     except:
         pass
+    await cb.answer()
+
+@router.callback_query(F.data == "miniapp")
+async def open_miniapp(cb: CallbackQuery):
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="🔐 Открыть шифратор",
+            web_app=WebAppInfo(url=MINIAPP_URL)
+        )]
+    ])
+    await cb.message.answer(
+        "🔐 *Нажмите кнопку ниже, чтобы открыть шифратор*\n\n"
+        "_Все данные остаются на вашем устройстве_",
+        reply_markup=keyboard
+    )
+    await cb.answer()
+
+@router.callback_query(F.data == "info")
+async def show_info(cb: CallbackQuery):
+    info_text = (
+        "ℹ️ *О eCrypto*\n\n"
+        "🔐 Полностью анонимный E2E чат на Telegram\n\n"
+        "✨ *Особенности:*\n"
+        "• AES-256 шифрование\n"
+        "• PBKDF2 + HMAC аутентификация\n"
+        "• Нулевое знание серверов\n"
+        "• Временные соединения\n"
+        "• Отсутствие логов\n"
+        "• Нет логирования в браузере"
+        "• Все вычисления локальные"
+        "• Open source\n\n"
+        "🛡 *Безопасность:*\n"
+        "Все сообщения шифруются локально на вашем устройстве.\n"
+        "Отрытый репозиторий - https://github.com/ew0d/e2e"
+    )
+    await cb.message.edit_text(info_text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="← Назад", callback_data="back_to_menu")]
+    ]))
+    await cb.answer()
+
+@router.callback_query(F.data == "back_to_menu")
+async def back_to_menu(cb: CallbackQuery):
+    await cb.message.edit_text(
+        "🔐 *Анонимный E2E чат*\n\n"
+        "• Никаких логов\n"
+        "• Полное шифрование\n"
+        "• Временные соединения\n\n"
+        "_Все данные хранятся локально_",
+        reply_markup=main_menu()
+    )
     await cb.answer()
 
 @router.message()
